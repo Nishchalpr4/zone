@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: zone-1-entity-explorer
+    env: python
+    region: frankfurt # Or your preferred region
+    plan: free # Can be changed to a paid plan later
+    buildCommand: "./render-build.sh"
+    startCommand: "gunicorn -b 0.0.0.0:$PORT -w 1 --timeout 120 -k uvicorn.workers.UvicornWorker main:app"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: "openai/gpt-oss-120b:free"
+      - key: LLM_BASE_URL
+        value: "https://openrouter.ai/api/v1"
+      - key: UPLOAD_DIR
+        value: "uploads"
+      - key: PYTHON_VERSION
+        value: 3.10.12 # Or any other version supported by Render

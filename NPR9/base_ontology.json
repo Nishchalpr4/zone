@@ -1,0 +1,543 @@
+{
+  "entity_types": [
+    "LegalEntity",
+    "BusinessUnit",
+    "Sector",
+    "Industry",
+    "SubIndustry",
+    "EndMarket",
+    "Channel",
+    "ProductDomain",
+    "ProductFamily",
+    "ProductLine",
+    "Site",
+    "Geography",
+    "Person",
+    "Role",
+    "Technology",
+    "Capability",
+    "Brand",
+    "Initiative",
+    "Program",
+    "Management",
+    "CompetitorNetwork",
+    "ProductPortfolio",
+    "Market",
+    "Manufacturer",
+    "Strategy",
+    "SupplyChain",
+    "ManufacturingNetwork",
+    "MarketForecast",
+    "ProductionInsight",
+    "ServicePortfolio"
+  ],
+  "relation_types": [
+    "HAS_MANAGEMENT",
+    "HAS_STRATEGY",
+    "HAS_SUPPLY_CHAIN",
+    "HAS_NETWORK",
+    "HAS_PRODUCTS",
+    "HAS_MARKET_INSIGHT",
+    "COMPETES_WITH",
+    "HAS_PRODUCT_DOMAIN",
+    "HAS_PRODUCT_FAMILY",
+    "HAS_PRODUCT_LINE",
+    "LOCATED_IN",
+    "OPERATES_IN",
+    "INCLUDES",
+    "LEADS",
+    "HAS_ROLE",
+    "HELD_BY",
+    "MANUFACTURES_FOR",
+    "APPLIES_TO_END_MARKET",
+    "ANALYZES",
+    "ANALYST_OF",
+    "REPORTED_BY",
+    "ASSOCIATED_WITH",
+    "MAPPED_TO",
+    "HAS_INITIATIVE",
+    "HAS_SERVICE_PORTFOLIO",
+    "HAS_PRODUCTION_INSIGHT",
+    "HAS_COMPETITOR_NETWORK"
+  ],
+  "data_entity_types": [
+    "Metric",
+    "KPI",
+    "Financial",
+    "Revenue",
+    "Cost",
+    "Margin",
+    "GrowthRate",
+    "Volume",
+    "Price",
+    "Capacity",
+    "Utilization",
+    "MarketShare",
+    "Forecast",
+    "TimePeriod",
+    "Scenario",
+    "Benchmark",
+    "DataPoint",
+    "Currency",
+    "Unit",
+    "Assumption",
+    "Driver"
+  ],
+  "data_relation_types": [
+    "HAS_METRIC",
+    "HAS_KPI",
+    "HAS_VALUE",
+    "HAS_UNIT",
+    "HAS_CURRENCY",
+    "HAS_TIME_PERIOD",
+    "HAS_SCENARIO",
+    "HAS_DRIVER",
+    "DERIVED_FROM",
+    "COMPARED_TO",
+    "BENCHMARKED_AGAINST",
+    "FORECAST_FOR",
+    "ASSOCIATED_WITH",
+    "REPORTED_IN",
+    "PART_OF",
+    "MEASURED_AS"
+  ],
+  "data_allowed_triples": [
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_METRIC",
+      "target": "Metric"
+    },
+    {
+      "source": "BusinessUnit",
+      "relation": "HAS_METRIC",
+      "target": "Metric"
+    },
+    {
+      "source": "ProductLine",
+      "relation": "HAS_METRIC",
+      "target": "Metric"
+    },
+    {
+      "source": "Geography",
+      "relation": "HAS_METRIC",
+      "target": "Metric"
+    },
+    {
+      "source": "Metric",
+      "relation": "HAS_VALUE",
+      "target": "DataPoint"
+    },
+    {
+      "source": "DataPoint",
+      "relation": "HAS_UNIT",
+      "target": "Unit"
+    },
+    {
+      "source": "DataPoint",
+      "relation": "HAS_CURRENCY",
+      "target": "Currency"
+    },
+    {
+      "source": "DataPoint",
+      "relation": "HAS_TIME_PERIOD",
+      "target": "TimePeriod"
+    },
+    {
+      "source": "DataPoint",
+      "relation": "HAS_SCENARIO",
+      "target": "Scenario"
+    },
+    {
+      "source": "Metric",
+      "relation": "HAS_DRIVER",
+      "target": "Driver"
+    },
+    {
+      "source": "Forecast",
+      "relation": "FORECAST_FOR",
+      "target": "TimePeriod"
+    },
+    {
+      "source": "Forecast",
+      "relation": "FORECAST_FOR",
+      "target": "Scenario"
+    },
+    {
+      "source": "Metric",
+      "relation": "BENCHMARKED_AGAINST",
+      "target": "Benchmark"
+    },
+    {
+      "source": "DataPoint",
+      "relation": "COMPARED_TO",
+      "target": "DataPoint"
+    },
+    {
+      "source": "Metric",
+      "relation": "DERIVED_FROM",
+      "target": "Metric"
+    }
+  ],
+  "data_extraction_rules": [
+    "METRIC CREATION: Every quantitative or quasi-quantitative mention MUST be converted into a Metric or DataPoint node.",
+    "VALUE SEPARATION: Numeric values MUST be stored as separate DataPoint nodes, not embedded in Metric names.",
+    "TIME BINDING: Every DataPoint MUST be linked to a TimePeriod if mentioned or inferable.",
+    "UNIT NORMALIZATION: Units (%, USD, units, tons) MUST be explicitly extracted and linked.",
+    "DRIVER LINKING: If a cause is mentioned, extract it as Driver and link via HAS_DRIVER.",
+    "FORECAST DISTINCTION: Forward-looking values MUST be tagged as Forecast and linked to Scenario if applicable.",
+    "NO DUPLICATE METRICS: Similar metric labels must map to one canonical Metric node.",
+    "ATTACH TO ENTITY ZONE: Every Metric MUST connect to at least one Zone 1 entity node.",
+    "GRANULARITY RULE: Prefer atomic metrics (Revenue, Volume) over aggregated phrases.",
+    "EVIDENCE: Every DataPoint MUST retain verbatim source_text."
+  ],
+  "structural_metadata": {
+    "bridge_rules": {
+      "Product": {
+        "type": "ProductPortfolio",
+        "rel": "HAS_PRODUCTS",
+        "bridge_rel": "HAS_PRODUCT_PORTFOLIO",
+        "suffix": "Portfolio"
+      },
+      "ProductLine": {
+        "type": "ProductPortfolio",
+        "rel": "HAS_PRODUCTS",
+        "bridge_rel": "HAS_PRODUCT_PORTFOLIO",
+        "suffix": "Portfolio"
+      },
+      "Service": {
+        "type": "ServicePortfolio",
+        "rel": "HAS_PRODUCTS",
+        "bridge_rel": "HAS_SERVICE_PORTFOLIO",
+        "suffix": "Service Portfolio"
+      },
+      "Competitors": {
+        "type": "CompetitorNetwork",
+        "rel": "COMPETES_WITH",
+        "bridge_rel": "HAS_COMPETITOR_NETWORK",
+        "suffix": "Competitor Network"
+      },
+      "Person": {
+        "type": "Management",
+        "rel": "HAS_MANAGEMENT",
+        "bridge_rel": "HAS_MANAGEMENT",
+        "suffix": "Management"
+      },
+      "Geography": {
+        "type": "ManufacturingNetwork",
+        "rel": "LOCATED_IN",
+        "bridge_rel": "HAS_SUPPLY_CHAIN",
+        "suffix": "Manufacturing Hubs"
+      }
+    },
+    "taxonomic_rels": [
+      "HAS_MANAGEMENT",
+      "HAS_STRATEGY",
+      "HAS_SUPPLY_CHAIN",
+      "HAS_NETWORK",
+      "HAS_PRODUCTS",
+      "HAS_PRODUCT",
+      "HAS_MARKET_INSIGHT",
+      "INCLUDES",
+      "HAS_PRODUCT_PORTFOLIO",
+      "HAS_SERVICE_PORTFOLIO",
+      "HAS_PRODUCT_DOMAIN",
+      "HAS_PRODUCT_FAMILY",
+      "HAS_PRODUCT_LINE",
+      "HAS_PRODUCTION_INSIGHT",
+      "HAS_BUSINESS_UNIT",
+      "HAS_COMPETITOR_NETWORK",
+      "REPORTED_BY",
+      "OPERATES_IN"
+    ]
+  },
+  "allowed_triples": [
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_MANAGEMENT",
+      "target": "Management"
+    },
+    {
+      "source": "Management",
+      "relation": "HAS_MANAGEMENT",
+      "target": "Person"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_STRATEGY",
+      "target": "Strategy"
+    },
+    {
+      "source": "Strategy",
+      "relation": "LEADS",
+      "target": "Person"
+    },
+    {
+      "source": "Strategy",
+      "relation": "OPERATES_IN",
+      "target": "Geography"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_SUPPLY_CHAIN",
+      "target": "SupplyChain"
+    },
+    {
+      "source": "SupplyChain",
+      "relation": "HAS_NETWORK",
+      "target": "ManufacturingNetwork"
+    },
+    {
+      "source": "ManufacturingNetwork",
+      "relation": "LOCATED_IN",
+      "target": "Geography"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_PRODUCTS",
+      "target": "ProductLine"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "COMPETES_WITH",
+      "target": "LegalEntity"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_MARKET_INSIGHT",
+      "target": "MarketForecast"
+    },
+    {
+      "source": "Geography",
+      "relation": "INCLUDES",
+      "target": "Geography"
+    },
+    {
+      "source": "ProductionInsight",
+      "relation": "REPORTED_BY",
+      "target": "LegalEntity"
+    },
+    {
+      "source": "ProductionInsight",
+      "relation": "LOCATED_IN",
+      "target": "Geography"
+    },
+    {
+      "source": "Manufacturer",
+      "relation": "MANUFACTURES_FOR",
+      "target": "LegalEntity"
+    },
+    {
+      "source": "Manufacturer",
+      "relation": "LOCATED_IN",
+      "target": "Geography"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_INITIATIVE",
+      "target": "Initiative"
+    },
+    {
+      "source": "Initiative",
+      "relation": "OPERATES_IN",
+      "target": "Geography"
+    },
+    {
+      "source": "LegalEntity",
+      "relation": "HAS_SERVICE_PORTFOLIO",
+      "target": "ServicePortfolio"
+    },
+    {
+      "source": "ServicePortfolio",
+      "relation": "HAS_PRODUCTS",
+      "target": "ProductLine"
+    }
+  ],
+  "entity_colors": {
+    "LegalEntity": "#3b82f6",
+    "BusinessUnit": "#10b981",
+    "Sector": "#8E44AD",
+    "Industry": "#2C3E50",
+    "SubIndustry": "#16A085",
+    "EndMarket": "#D35400",
+    "Channel": "#C0392B",
+    "ProductDomain": "#8b5cf6",
+    "ProductFamily": "#3498DB",
+    "ProductLine": "#f59e0b",
+    "Site": "#E74C3C",
+    "Geography": "#F39C12",
+    "Person": "#9B59B6",
+    "Role": "#7F8C8D",
+    "Technology": "#00BCD4",
+    "Capability": "#FF5722",
+    "Brand": "#FF9800",
+    "Initiative": "#795548",
+    "Program": "#607D8B",
+    "Management": "#FFD700",
+    "Competitors": "#ef4444",
+    "ProductPortfolio": "#ef4444",
+    "Market": "#9333ea",
+    "Manufacturer": "#f43f5e",
+    "Strategy": "#9c27b0",
+    "SupplyChain": "#3f51b5",
+    "ManufacturingNetwork": "#673ab7",
+    "MarketForecast": "#ff9800",
+    "ProductionInsight": "#e91e63",
+    "ServicePortfolio": "#06b6d4"
+  },
+  "extraction_rules": [
+    "STRICT TAXONOMY: Every entity MUST have a path to the TIER 0 ROOT LegalEntity.",
+    "DOMAIN EXTRACTION: If the text mentions a broad category (e.g. 'consumer electronics', 'luxury goods', 'athletic footwear'), YOU MUST extract it as a ProductDomain entity.",
+    "SERVICE PORTFOLIO: Services (iCloud, Apple Music, Subscriptions) MUST be grouped under a 'Service Portfolio' bridge node.",
+    "REVENUE EXTRACTION: If an entity is noted for generating revenue (e.g., 'revenue from iPhone'), YOU MUST create a 'Revenue' entity (type Financial)",
+    "STRATEGY EXTRACTION: Themes like 'design focus' or 'user experience' MUST be extracted as Strategy or Capability entities and connected to the Root via HAS_STRATEGY.",
+    "NESTING RULE: Products (iPhone, Mac) MUST NOT connect directly to the Root if a ProductDomain or ProductFamily exists. Nest them inside.",
+    "BRIDGE NODES: If related products are mentioned but no explicit group name is given, use or CREATE a logical bridge node like 'ProductPortfolio' to group them.",
+    "SPINE LINKS: Root -> HAS_PRODUCT_DOMAIN -> Domain -> INCLUDES -> Family -> HAS_PRODUCT_LINE -> Line.",
+    "NO ORPHANS: Every node MUST lead back to the ROOT. Prioritize the taxonomic chain over associative links.",
+    "EVIDENCE: Every relation MUST have verbatim source_text quote."
+  ],
+  "extraction_examples": [
+    {
+      "input": "Apple Inc. designs and sells consumer electronics like the iPhone and Mac. It is known for its strong focus on design and user experience. Apple Inc. generates a significant portion of its revenue from iPhone sales. Services like iCloud and Apple Music are growing rapidly.",
+      "thought_process": "Created Apple Inc as Root. Created 'Consumer Electronics' domain. Grouped iPhone/Mac under 'Digital Products' portfolio. Grouped iCloud/Music under 'Service Portfolio'. Extracted 'Design Focus' and 'User Experience' as Strategy. Linked iPhone to 'Significant Revenue'.",
+      "output_json": {
+        "entities": [
+          {
+            "temp_id": "e1",
+            "canonical_name": "Apple Inc.",
+            "entity_type": "LegalEntity",
+            "short_info": "Technology leader globally."
+          },
+          {
+            "temp_id": "e_dom",
+            "canonical_name": "Consumer Electronics",
+            "entity_type": "ProductDomain",
+            "short_info": "Broad electronics sector."
+          },
+          {
+            "temp_id": "e_bridge1",
+            "canonical_name": "Digital Products",
+            "entity_type": "ProductPortfolio",
+            "short_info": "Hardware device collection."
+          },
+          {
+            "temp_id": "e2",
+            "canonical_name": "iPhone",
+            "entity_type": "ProductLine",
+            "short_info": "Smartphone line."
+          },
+          {
+            "temp_id": "e3",
+            "canonical_name": "Mac",
+            "entity_type": "ProductLine",
+            "short_info": "Computer line."
+          },
+          {
+            "temp_id": "e_svc",
+            "canonical_name": "Service Portfolio",
+            "entity_type": "ServicePortfolio",
+            "short_info": "Cloud and media services."
+          },
+          {
+            "temp_id": "e4",
+            "canonical_name": "iCloud",
+            "entity_type": "ProductLine",
+            "short_info": "Cloud storage service."
+          },
+          {
+            "temp_id": "e5",
+            "canonical_name": "Apple Music",
+            "entity_type": "ProductLine",
+            "short_info": "Streaming service."
+          },
+          {
+            "temp_id": "e6",
+            "canonical_name": "Design Focus",
+            "entity_type": "Strategy",
+            "short_info": "Core design philosophy."
+          },
+          {
+            "temp_id": "e7",
+            "canonical_name": "User Experience",
+            "entity_type": "Strategy",
+            "short_info": "Priority on usability."
+          },
+          {
+            "temp_id": "e8",
+            "canonical_name": "Significant Revenue",
+            "entity_type": "Financial",
+            "short_info": "Primary income source."
+          }
+        ],
+        "relations": [
+          {
+            "source_temp_id": "e1",
+            "relation_type": "HAS_PRODUCT_DOMAIN",
+            "target_temp_id": "e_dom",
+            "source_text": "Apple Inc. designs and sells consumer electronics like the iPhone and Mac."
+          },
+          {
+            "source_temp_id": "e_dom",
+            "relation_type": "INCLUDES",
+            "target_temp_id": "e_bridge1",
+            "source_text": "designs and sells consumer electronics like the iPhone and Mac."
+          },
+          {
+            "source_temp_id": "e_bridge1",
+            "relation_type": "HAS_PRODUCTS",
+            "target_temp_id": "e2",
+            "source_text": "iPhone"
+          },
+          {
+            "source_temp_id": "e_bridge1",
+            "relation_type": "HAS_PRODUCTS",
+            "target_temp_id": "e3",
+            "source_text": "Mac"
+          },
+          {
+            "source_temp_id": "e1",
+            "relation_type": "HAS_SERVICE_PORTFOLIO",
+            "target_temp_id": "e_svc",
+            "source_text": "Services like iCloud and Apple Music"
+          },
+          {
+            "source_temp_id": "e_svc",
+            "relation_type": "INCLUDES",
+            "target_temp_id": "e4",
+            "source_text": "iCloud"
+          },
+          {
+            "source_temp_id": "e_svc",
+            "relation_type": "INCLUDES",
+            "target_temp_id": "e5",
+            "source_text": "Apple Music"
+          },
+          {
+            "source_temp_id": "e1",
+            "relation_type": "HAS_STRATEGY",
+            "target_temp_id": "e6",
+            "source_text": "strong focus on design"
+          },
+          {
+            "source_temp_id": "e1",
+            "relation_type": "HAS_STRATEGY",
+            "target_temp_id": "e7",
+            "source_text": "user experience"
+          },
+          {
+            "source_temp_id": "e2",
+            "relation_type": "HAS_FINANCIALS",
+            "target_temp_id": "e8",
+            "source_text": "revenue from iPhone sales"
+          }
+        ]
+      }
+    }
+  ],
+  "multi_stage_prompts": {
+    "stage_1_entities": "### STAGE 1: ENTITY EXTRACTION (HIGH RECALL / DISCOVERY-FIRST)\nExtract ALL entities. Include Companies, People, Products, etc.\nSTRICT: You ARE an ontological pioneer. If a specific term (e.g., 'Fiscal-Disclosure', 'Subsurface-Reservoir') is more accurate than 'LegalEntity' or 'Industry', you MUST use the more specific term as the type.\nPRIORITIZE: Domain-specific clinical/technical labels over generic ones.\nALSO: If the text mentions management or competition, CREATE bridge nodes: 'Management' and 'Competitor Network'.\n\nOutput format:\n[\n  { \"name\": \"...\", \"type\": \"...\", \"aliases\": [...], \"evidence\": \"...\" }\n]",
+    "stage_2_resolution": "### STAGE 2: ENTITY RESOLUTION\nDeduplicate entities. Assign unique entity_id (E1, E2, etc.).\nSTRICT: PRESERVE the specific 'type' defined in Stage 1 if it is more descriptive. DO NOT map specific discoveries (e.g., 'Tax-Liability') back to broad types (e.g., 'Financial') if the specific type is semantically valid.\n\nOutput format:\n[\n  { \"entity_id\": \"E1\", \"canonical_name\": \"...\", \"type\": \"...\", \"aliases\": [...] }\n]",
+    "stage_3_relations": "### STAGE 3: RELATION EXTRACTION (STRICT HIERARCHY / SCHEMA DISCOVERY)\nAssign relations using entity_ids. \n\nDISCOVERY RULE: While {relations} are standard, you ARE EXPECTED to propose NEW RELATION TYPES if the text depicts a unique link (e.g., 'TAXED_BY', 'LOCATED_IN', 'REVEALS').\n\nSTRICT NESTING RULES:\n1. People/Management MUST be connected to the 'Management' bridge node.\n2. Products MUST be connected to ProductFamily or ProductPortfolio.\n3. Hierarchy Path: Root Company -> HAS_PRODUCT_DOMAIN -> ProductDomain -> INCLUDES -> ProductFamily -> HAS_PRODUCT_LINE -> ProductLine.\n\nEVIDENCE: EVERY relation MUST include a verbatim quote.\n\nOutput format:\n[\n  { \"source_id\": \"E1\", \"relation\": \"...\", \"target_id\": \"E2\", \"evidence\": \"...\", \"confidence\": 0-1 }\n]",
+    "stage_4_facts": "### STAGE 4: ATTRIBUTE / FACT EXTRACTION\nExtract quantitative data for resolved entities.\nSTRICT: Skip if no number exists. DO NOT use '0' as placeholder.\n\nOutput format:\n[\n  { \"entity_id\": \"E1\", \"attribute\": \"...\", \"value\": \"...\", \"unit\": \"...\", \"time_context\": \"...\", \"evidence\": \"...\" }\n]"
+  }
+}

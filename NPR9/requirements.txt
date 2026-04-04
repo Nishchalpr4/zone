@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+gunicorn
+python-dotenv
+httpx
+requests
+pydantic>=2.0
+python-multipart
+psycopg2-binary
+openai

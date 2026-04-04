@@ -1,0 +1,90 @@
+MODEL: google/gemini-2.0-flash-001
+RESPONSE:
+```json
+{
+  "entities": [
+    [
+      "e1",
+      "Apple Inc.",
+      "LegalEntity",
+      "root company"
+    ],
+    [
+      "e2",
+      "Consumer Devices",
+      "ProductFamily",
+      "under Apple Inc."
+    ],
+    [
+      "e3",
+      "iPhone",
+      "ProductLine",
+      "under the Consumer Devices family"
+    ],
+    [
+      "e4",
+      "Mac",
+      "ProductLine",
+      "under the Consumer Devices family"
+    ],
+    [
+      "e5",
+      "iCloud",
+      "ProductLine",
+      "under the Consumer Devices family"
+    ]
+  ],
+  "relations": [
+    [
+      "e2",
+      "is_part_of",
+      "e1"
+    ],
+    [
+      "e3",
+      "is_part_of",
+      "e2"
+    ],
+    [
+      "e4",
+      "is_part_of",
+      "e2"
+    ],
+    [
+      "e5",
+      "is_part_of",
+      "e2"
+    ],
+    [
+      "e1",
+      "designs",
+      "e3"
+    ],
+    [
+      "e1",
+      "sells",
+      "e3"
+    ],
+    [
+      "e1",
+      "designs",
+      "e4"
+    ],
+    [
+      "e1",
+      "sells",
+      "e4"
+    ],
+    [
+      "e5",
+      "is_used_on",
+      "e3"
+    ],
+    [
+      "e5",
+      "is_used_on",
+      "e4"
+    ]
+  ]
+}
+```

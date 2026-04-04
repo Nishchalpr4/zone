@@ -1,0 +1,231 @@
+"""
+Zone 1 Entity Graph Explorer — FastAPI Server
+===============================================
+Serves the API (extraction, graph state, reset) and static frontend files.
+
+Run:
+  uvicorn main:app --reload --port 8000
+
+Environment variables:
+  LLM_API_KEY   — Your API key (OpenRouter / OpenAI / etc.)
+  LLM_BASE_URL  — API base URL (default: https://openrouter.ai/api/v1)
+  LLM_MODEL     — Model name (default: openai/gpt-oss-120b:free)
+"""
+
+from __future__ import annotations
+
+import os
+import traceback
+from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv(override=True)  # Load .env with override to pick up changes on reload
+
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from graph_store import GraphStore
+from extraction import extract_knowledge, extract_knowledge_multistage, call_llm
+from validators import LogicGuard # Moved to top-level
+
+# ────────────────────────────────────────────────────────────────────────
+# APP SETUP
+# ────────────────────────────────────────────────────────────────────────
+
+
+app = FastAPI(
+    title="Zone 1 Entity Graph Explorer",
+    description="Interactive Zone 1 (Entity Zone) knowledge graph builder for investment analysis",
+    version="1.0.0",
+)
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── GLOBAL STATE ──
+# The 'store' is the brain of the app, coordinating database and LLM-driven ingestion.
+store = GraphStore()
+
+# ── STARTUP SEQUENCE ──
+@app.on_event("startup")
+def startup_sequence():
+    """Initializes the GraphStore and ensures it has the latest ontology from the DB."""
+    print(f"SERVER STARTUP: PID {os.getpid()} initializing state...")
+    try:
+        # We don't seed here anymore (handled in build), just fetch the latest
+        store.ontology = store.db.get_ontology()
+        store.guard = LogicGuard(store.ontology)
+        print("SERVER STARTUP: State initialized successfully.")
+    except Exception as e:
+        print(f"SERVER STARTUP ERROR: {e}")
+        traceback.print_exc()
+
+@app.post("/api/admin/reseed")
+async def reseed_ontology():
+    """Administrative endpoint to force refresh the ontology without restarting."""
+    try:
+        # Force a clean overwrite (merge=False) to clear stale legacy labels
+        store.db.seed_ontology(merge_with_existing=False)
+        store.ontology = store.db.get_ontology()
+        store.guard = LogicGuard(store.ontology)
+        return {"success": True, "message": "Ontology re-seeded successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ────────────────────────────────────────────────────────────────────────
+# REQUEST / RESPONSE MODELS
+# ────────────────────────────────────────────────────────────────────────
+
+class ExtractRequest(BaseModel):
+    text: str
+    document_name: str = "User Input"
+    section_ref: str = "chunk"
+    source_authority: int = 5
+    zone_id: str = "zone1_entity"
+    metadata: dict = {}
+    custom_prompt: Optional[str] = None # Explicitly Optional
+
+
+# ── EXTRACTION & INGESTION ──
+@app.post("/api/extract")
+async def extract_entities(req: ExtractRequest):
+    """
+    Accept a text chunk, extract Zone 1 entities/relations via LLM,
+    ingest into graph store, and return the diff + full graph.
+    """
+    api_key = os.getenv("LLM_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM_API_KEY not configured. Set it in your .env file."
+        )
+
+    try:
+        # Call LLM for extraction via the precision multi-stage pipeline
+        payload = extract_knowledge_multistage(
+            text=req.text,
+            document_name=req.document_name,
+            document_id=req.metadata.get("document_id", "user_input_doc"),
+            custom_prompt=req.custom_prompt
+        )
+
+        # Keep zone identity in metadata so downstream ingestion can be made zone-aware.
+        req.metadata.setdefault("zone_id", req.zone_id)
+
+        # Ingest into graph store
+        diff = store.ingest_extraction(payload, source_authority=req.source_authority, metadata=req.metadata)
+
+        # Return diff + full graph state (scoped to requested zone)
+        full_graph = store.get_full_graph(zone_id=req.zone_id)
+        return {
+            "success": True,
+            "zone_id": req.zone_id,
+            "diff": {
+                "new_entities": [e.canonical_name for e in payload.entities],  # Simple proxy for 'newness' for UI
+                "total_entities": full_graph['stats']['total_entities'],
+                "total_relations": full_graph['stats']['total_relations']
+            },
+            "graph": full_graph,
+            "extraction": {
+                "entities_extracted": len(payload.entities),
+                "relations_extracted": len(payload.relations),
+                "thought_process": payload.thought_process,
+                "llm_analysis_summary": payload.llm_analysis_summary,
+                "analysis_attributes": payload.analysis_attributes.dict() if payload.analysis_attributes else None,
+                "abstentions": payload.abstentions,
+                "discoveries": [d.dict() for d in payload.discoveries],
+            },
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+from extraction import get_dynamic_prompt
+
+@app.get("/api/prompt")
+async def get_current_prompt():
+    """Returns the multi-stage system prompts currently in use."""
+    ontology = store.db.get_ontology()
+    multi_stage = ontology.get("multi_stage_prompts", {})
+    
+    if multi_stage:
+        # Format for display in UI
+        formatted = "### MULTI-STAGE PRECISION PIPELINE\n\n"
+        for stage, prompt in multi_stage.items():
+            formatted += f"--- {stage.upper()} ---\n{prompt}\n\n"
+        return {"prompt": formatted}
+        
+    return {"prompt": get_dynamic_prompt()}
+
+
+@app.get("/api/graph")
+async def get_graph(zone: str = "all"):
+    """Return the current full graph state."""
+    return store.get_full_graph(zone_id=zone)
+
+
+@app.get("/api/log")
+async def get_log():
+    """Return the extraction history log."""
+    return store.get_extraction_log()
+
+
+@app.delete("/api/graph")
+@app.post("/api/reset")
+async def reset_graph():
+    """Clear the entire graph store."""
+    store.reset()
+    return {"success": True, "message": "Graph reset successfully."}
+
+
+@app.get("/api/health")
+async def health():
+    return {
+        "status": "ok",
+        "llm_configured": bool(os.getenv("LLM_API_KEY")),
+        "llm_model": os.getenv("LLM_MODEL", "openai/gpt-oss-120b:free"),
+        "llm_base_url": os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
+    }
+
+@app.get("/api/ontology")
+async def get_ontology():
+    """Returns the current ontology rules (entity types, relations, colors)."""
+    return store.db.get_ontology()
+
+
+# ────────────────────────────────────────────────────────────────────────
+# STATIC FILES — serve the frontend
+# ────────────────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def serve_index():
+    return FileResponse("static/index.html")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"GLOBAL ERROR: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "message": str(exc)},
+    )
+
+# Mount static files AFTER specific routes
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
