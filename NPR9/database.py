@@ -185,6 +185,19 @@ class DatabaseManager:
                 )
             """)
             
+            # 3e. ZONE 2: Zone Provenance (Simplified textual mapping for Option A)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS zone_provenance (
+                    id SERIAL PRIMARY KEY,
+                    zone_id TEXT NOT NULL,
+                    source_text TEXT NOT NULL,
+                    subject_id TEXT,
+                    document_name TEXT,
+                    section_ref TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # 4. Quant Data (Metrics)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS quant_data (
@@ -431,6 +444,14 @@ class DatabaseManager:
             """, (subject_id, subject_type, zone_id, source_text, confidence, status, document_name, section_ref, source_authority))
             row = cursor.fetchone()
             assertion_id = row['id']
+            
+            # Populate Option A: Zone Provenance table for easy auditing
+            if zone_id:
+                cursor.execute("""
+                    INSERT INTO zone_provenance (zone_id, source_text, subject_id, document_name, section_ref)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (zone_id, source_text, subject_id, document_name, section_ref))
+
             conn.commit()
             return assertion_id
         finally:
@@ -553,61 +574,97 @@ class DatabaseManager:
                 )
             else:
                 cursor.execute("SELECT id, name as label, type, color, description, short_info, attributes, aliases FROM entity_master")
+            raw_nodes = [dict(row) for row in cursor.fetchall()]
             nodes = []
-            for row in cursor.fetchall():
+            node_ids = []
+            for row in raw_nodes:
                 node = dict(row)
                 node['attributes'] = safe_json_loads(node['attributes'], default={})
                 node['aliases'] = safe_json_loads(node['aliases'], default=[])
-                
-                # ZONE 2: Fetch recent evidence scoped to requested zone.
-                if zone_id:
-                    cursor.execute(
-                        """
-                        SELECT status, confidence, source_text, document_name, section_ref, source_authority
-                        FROM assertions
-                        WHERE subject_id = %s AND subject_type = 'ENTITY' AND (zone_id = %s OR zone_id IS NULL)
-                        ORDER BY timestamp DESC LIMIT 3
-                        """,
-                        (node['id'], zone_id),
-                    )
-                else:
-                    cursor.execute("""
-                        SELECT status, confidence, source_text, document_name, section_ref, source_authority 
-                        FROM assertions 
-                        WHERE subject_id = %s AND subject_type = 'ENTITY' 
-                        ORDER BY timestamp DESC LIMIT 3
-                    """, (node['id'],))
-                node['evidence'] = [dict(r) for r in cursor.fetchall()]
-                
-                # ZONE 2: Fetch metrics scoped to requested zone assertions.
-                if zone_id:
-                    cursor.execute(
-                        """
-                        SELECT q.metric, q.value, q.unit, q.period, a.source_authority
-                        FROM quant_data q
-                        JOIN assertions a ON q.source_assertion_id = a.id
-                        WHERE q.entity_id = %s AND (a.zone_id = %s OR a.zone_id IS NULL)
-                        ORDER BY a.source_authority DESC, a.timestamp DESC
-                        """,
-                        (node['id'], zone_id),
-                    )
-                else:
-                    cursor.execute("""
-                        SELECT q.metric, q.value, q.unit, q.period, a.source_authority
-                        FROM quant_data q
-                        JOIN assertions a ON q.source_assertion_id = a.id
-                        WHERE q.entity_id = %s
-                        ORDER BY a.source_authority DESC, a.timestamp DESC
-                    """, (node['id'],))
-                
-                all_metrics = [dict(r) for r in cursor.fetchall()]
-                consensus_metrics = {}
-                for m in all_metrics:
-                    key = f"{m['metric']}_{m['period']}"
-                    if key not in consensus_metrics:
-                        consensus_metrics[key] = m
-                node['quant_metrics'] = list(consensus_metrics.values())
+                node['evidence'] = []
+                node['quant_metrics'] = []
                 nodes.append(node)
+                node_ids.append(node['id'])
+
+            node_map = {n['id']: n for n in nodes}
+
+            if node_ids:
+                node_placeholders = ','.join(['%s'] * len(node_ids))
+
+                # Batch entity evidence fetch, then keep latest 3 per entity in Python.
+                if zone_id:
+                    cursor.execute(
+                        f"""
+                        SELECT subject_id, status, confidence, source_text, document_name, section_ref, source_authority, timestamp
+                        FROM assertions
+                        WHERE subject_type = 'ENTITY'
+                          AND subject_id IN ({node_placeholders})
+                          AND (zone_id = %s OR zone_id IS NULL)
+                        ORDER BY subject_id, timestamp DESC
+                        """,
+                        node_ids + [zone_id],
+                    )
+                else:
+                    cursor.execute(
+                        f"""
+                        SELECT subject_id, status, confidence, source_text, document_name, section_ref, source_authority, timestamp
+                        FROM assertions
+                        WHERE subject_type = 'ENTITY'
+                          AND subject_id IN ({node_placeholders})
+                        ORDER BY subject_id, timestamp DESC
+                        """,
+                        node_ids,
+                    )
+
+                entity_evidence_count = {}
+                for row in cursor.fetchall():
+                    rec = dict(row)
+                    sid = rec.pop('subject_id')
+                    rec.pop('timestamp', None)
+                    count = entity_evidence_count.get(sid, 0)
+                    if count < 3 and sid in node_map:
+                        node_map[sid]['evidence'].append(rec)
+                        entity_evidence_count[sid] = count + 1
+
+                # Batch quant metric fetch.
+                if zone_id:
+                    cursor.execute(
+                        f"""
+                        SELECT q.entity_id, q.metric, q.value, q.unit, q.period, a.source_authority, a.timestamp
+                        FROM quant_data q
+                        JOIN assertions a ON q.source_assertion_id = a.id
+                        WHERE q.entity_id IN ({node_placeholders})
+                          AND (a.zone_id = %s OR a.zone_id IS NULL)
+                        ORDER BY q.entity_id, a.source_authority DESC, a.timestamp DESC
+                        """,
+                        node_ids + [zone_id],
+                    )
+                else:
+                    cursor.execute(
+                        f"""
+                        SELECT q.entity_id, q.metric, q.value, q.unit, q.period, a.source_authority, a.timestamp
+                        FROM quant_data q
+                        JOIN assertions a ON q.source_assertion_id = a.id
+                        WHERE q.entity_id IN ({node_placeholders})
+                        ORDER BY q.entity_id, a.source_authority DESC, a.timestamp DESC
+                        """,
+                        node_ids,
+                    )
+
+                metrics_by_entity = {}
+                for row in cursor.fetchall():
+                    rec = dict(row)
+                    entity_id = rec.pop('entity_id')
+                    rec.pop('timestamp', None)
+                    key = f"{rec['metric']}_{rec['period']}"
+                    if entity_id not in metrics_by_entity:
+                        metrics_by_entity[entity_id] = {}
+                    if key not in metrics_by_entity[entity_id]:
+                        metrics_by_entity[entity_id][key] = rec
+
+                for entity_id, metric_map in metrics_by_entity.items():
+                    if entity_id in node_map:
+                        node_map[entity_id]['quant_metrics'] = list(metric_map.values())
 
             # ZONE 2: For zone-filtered queries, include ALL relations where BOTH endpoints are
             # in the zone — even if the relation itself was not explicitly zone-tagged.
@@ -628,29 +685,53 @@ class DatabaseManager:
                     cursor.execute("SELECT id, source_id as source, target_id as target, relation, weight, attributes FROM relation_master WHERE 1=0")
             else:
                 cursor.execute("SELECT id, source_id as source, target_id as target, relation, weight, attributes FROM relation_master")
+            raw_links = [dict(row) for row in cursor.fetchall()]
             links = []
-            for row in cursor.fetchall():
+            link_ids = []
+            for row in raw_links:
                 link = dict(row)
                 link['attributes'] = safe_json_loads(link.get('attributes'), default={})
+                link['evidence'] = []
+                links.append(link)
+                link_ids.append(link['id'])
+
+            link_map = {l['id']: l for l in links}
+
+            if link_ids:
+                link_placeholders = ','.join(['%s'] * len(link_ids))
                 if zone_id:
                     cursor.execute(
-                        """
-                        SELECT status, confidence, source_text, document_name, section_ref
+                        f"""
+                        SELECT subject_id, status, confidence, source_text, document_name, section_ref, timestamp
                         FROM assertions
-                        WHERE subject_id = %s AND subject_type = 'RELATION' AND (zone_id = %s OR zone_id IS NULL)
-                        ORDER BY timestamp DESC LIMIT 3
+                        WHERE subject_type = 'RELATION'
+                          AND subject_id IN ({link_placeholders})
+                          AND (zone_id = %s OR zone_id IS NULL)
+                        ORDER BY subject_id, timestamp DESC
                         """,
-                        (link['id'], zone_id),
+                        link_ids + [zone_id],
                     )
                 else:
-                    cursor.execute("""
-                        SELECT status, confidence, source_text, document_name, section_ref 
-                        FROM assertions 
-                        WHERE subject_id = %s AND subject_type = 'RELATION' 
-                        ORDER BY timestamp DESC LIMIT 3
-                    """, (link['id'],))
-                link['evidence'] = [dict(r) for r in cursor.fetchall()]
-                links.append(link)
+                    cursor.execute(
+                        f"""
+                        SELECT subject_id, status, confidence, source_text, document_name, section_ref, timestamp
+                        FROM assertions
+                        WHERE subject_type = 'RELATION'
+                          AND subject_id IN ({link_placeholders})
+                        ORDER BY subject_id, timestamp DESC
+                        """,
+                        link_ids,
+                    )
+
+                relation_evidence_count = {}
+                for row in cursor.fetchall():
+                    rec = dict(row)
+                    sid = rec.pop('subject_id')
+                    rec.pop('timestamp', None)
+                    count = relation_evidence_count.get(sid, 0)
+                    if count < 3 and sid in link_map:
+                        link_map[sid]['evidence'].append(rec)
+                        relation_evidence_count[sid] = count + 1
 
             return {"nodes": nodes, "links": links}
         finally:

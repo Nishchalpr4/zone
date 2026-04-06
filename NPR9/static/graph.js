@@ -25,6 +25,8 @@ class GraphVisualization {
         this.nodes = [];
         this.links = [];
         this.collapsedNodes = new Set();
+        this.zoneHighlightNodeIds = null;
+        this.zoneHighlightLinkIds = null;
 
         // Main container
         this.container = this.svg.append("g").attr("class", "graph-world");
@@ -193,6 +195,9 @@ class GraphVisualization {
         this.simulation.nodes(this.nodes);
         this.simulation.force("link").links(this.links);
         this.simulation.alpha(1).restart();
+
+        // Re-apply zone highlight overlay after render updates.
+        this._applyZoneHighlightOverlay();
     }
 
     _toggleCollapse(nodeId) {
@@ -207,6 +212,8 @@ class GraphVisualization {
     reset() {
         this.nodes = [];
         this.links = [];
+        this.zoneHighlightNodeIds = null;
+        this.zoneHighlightLinkIds = null;
         this.linkGroup.selectAll("*").remove();
         this.nodeGroup.selectAll("*").remove();
         this.simulation.nodes([]);
@@ -216,6 +223,33 @@ class GraphVisualization {
         this.svg.transition().duration(500).call(
             this.zoom.transform, d3.zoomIdentity
         );
+    }
+
+    setZoneHighlight(nodeIds, linkIds) {
+        this.zoneHighlightNodeIds = nodeIds instanceof Set ? nodeIds : new Set(nodeIds || []);
+        this.zoneHighlightLinkIds = linkIds instanceof Set ? linkIds : new Set(linkIds || []);
+        this._applyZoneHighlightOverlay();
+    }
+
+    clearZoneHighlight() {
+        this.zoneHighlightNodeIds = null;
+        this.zoneHighlightLinkIds = null;
+        this._applyZoneHighlightOverlay();
+    }
+
+    _applyZoneHighlightOverlay() {
+        const hasHighlight = this.zoneHighlightNodeIds && this.zoneHighlightNodeIds.size > 0;
+        if (!hasHighlight) {
+            this.nodeGroup.selectAll(".node-group").attr("opacity", 1);
+            this.linkGroup.selectAll(".edge-group").attr("opacity", 1);
+            return;
+        }
+
+        this.nodeGroup.selectAll(".node-group")
+            .attr("opacity", d => this.zoneHighlightNodeIds.has(d.id) ? 1 : 0.05);
+
+        this.linkGroup.selectAll(".edge-group")
+            .attr("opacity", d => this.zoneHighlightLinkIds && this.zoneHighlightLinkIds.has(d.id) ? 1 : 0.02);
     }
 
     // ── Rendering ───────────────────────────────────────────────
@@ -539,10 +573,16 @@ class GraphVisualization {
                 const cp1x = mx + nx * midOffset;
                 const cp1y = my + ny * midOffset;
 
-                // Stop source line at edge, stop target line EARLY for arrow marker
+                // For normal single edges, use straight lines for stable geometry.
+                if (sameNodes.length <= 1) {
+                    const p1 = getIntersection(d.source, d.target.x, d.target.y, 2);
+                    const p2 = getIntersection(d.target, d.source.x, d.source.y, MARKER_PADDING);
+                    return `M${p1.x},${p1.y} L${p2.x},${p2.y}`;
+                }
+
+                // For parallel edges, use curved splines to separate link paths.
                 const p1 = getIntersection(d.source, cp1x, cp1y, 2);
                 const p2 = getIntersection(d.target, cp1x, cp1y, MARKER_PADDING);
-
                 return `M${p1.x},${p1.y} Q${cp1x},${cp1y} ${p2.x},${p2.y}`;
             });
 
@@ -552,6 +592,9 @@ class GraphVisualization {
                     (l.source.id === d.source.id && l.target.id === d.target.id) ||
                     (l.source.id === d.target.id && l.target.id === d.source.id)
                 );
+                if (sameNodes.length <= 1) {
+                    return (d.source.x + d.target.x) / 2;
+                }
                 const offsetAmount = 50;
                 let midOffset = 0;
                 if (sameNodes.length > 1) {
@@ -572,6 +615,9 @@ class GraphVisualization {
                     (l.source.id === d.source.id && l.target.id === d.target.id) ||
                     (l.source.id === d.target.id && l.target.id === d.source.id)
                 );
+                if (sameNodes.length <= 1) {
+                    return (d.source.y + d.target.y) / 2;
+                }
                 const offsetAmount = 50;
                 let midOffset = 0;
                 if (sameNodes.length > 1) {

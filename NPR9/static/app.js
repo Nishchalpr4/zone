@@ -36,8 +36,9 @@ const ENTITY_TYPE_COLORS = {
 let graph;
 let chunkCount = 0;
 let lastExtractedText = ""; // Store for re-runs
-let currentViewZone = "zone1_entity"; // Currently selected zone for display
-let lastRenderedZone = "zone1_entity";
+let currentViewZone = "all"; // Selected highlight zone: "all", "zone1_entity", or "zone2_data"
+let allGraphData = null; // Cache for full graph
+let activeGraphRequestId = 0;
 
 // ── Initialize ─────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -64,15 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
             toggle.classList.add("active");
             // Update current zone and fetch graph
             currentViewZone = toggle.getAttribute("data-zone");
-
-            // Reset transient graph UI state on zone switches so tiny zone graphs
-            // don't inherit stretched coordinates from the previous zone.
-            if (graph) {
-                graph.collapsedNodes.clear();
-                graph.reset();
-            }
-
-            fetchGraph();
+            fetchGraph(true); // Pass true to indicate a zone-only transition
         });
     });
 
@@ -117,7 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
     runCustomBtn.addEventListener("click", () => {
         const customPrompt = promptEditor.value.trim();
         promptOverlay.style.display = "none";
-        
+
         // Use the last-extracted text for re-runs, or the current textarea if none
         const textToUse = lastExtractedText || document.getElementById("text-input").value.trim();
         handleExtract(customPrompt, textToUse);
@@ -212,28 +205,76 @@ async function fetchOntology() {
 }
 
 // ── Fetch Initial Data ────────────────────────────────────────────────
-async function fetchGraph() {
+async function fetchGraph(isZoneToggle = false) {
+    const requestId = ++activeGraphRequestId;
     try {
-        const zoneChanged = currentViewZone !== lastRenderedZone;
-        if (zoneChanged && graph) {
-            graph.collapsedNodes.clear();
-            graph.reset();
-            lastRenderedZone = currentViewZone;
+        console.log(`[Fetch] Fetching graph for zone: ${currentViewZone}, isZoneToggle: ${isZoneToggle}`);
+        setStatus(`Loading ${currentViewZone === "all" ? "full graph" : currentViewZone.replace("_", " ")}...`);
+
+        // 1. Fetch Full Graph if missing or explicitly needed
+        if (!allGraphData || !isZoneToggle) {
+            const allRes = await fetch(`/api/graph?zone=all&v=${Date.now()}`);
+            if (!allRes.ok) throw new Error(`Full graph request failed (${allRes.status})`);
+            const allText = await allRes.text();
+            if (!allText) throw new Error("Empty full graph response from server");
+            allGraphData = JSON.parse(allText);
+            console.log(`[Fetch] All graph data loaded: ${allGraphData.nodes.length} nodes`);
         }
 
-        // Use the currently selected zone from toggle
-        const res = await fetch(`/api/graph?zone=${encodeURIComponent(currentViewZone)}&v=6`);
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const text = await res.text();
-        if (!text) throw new Error("Empty response from server");
-        const data = JSON.parse(text);
-        if (data && data.nodes) {
-            graph.update(data);
-            document.getElementById("entity-count").textContent = data.stats.total_entities;
-            document.getElementById("relation-count").textContent = data.stats.total_relations;
+        if (requestId !== activeGraphRequestId) return;
+
+        if (allGraphData && Array.isArray(allGraphData.nodes)) {
+            // Initial render or hard refresh
+            if (!isZoneToggle) {
+                console.log("[Graph] Performing full update...");
+                graph.update(allGraphData);
+            }
+
+            // 2. Apply Zone Highlight Overlay
+            if (currentViewZone !== "all") {
+                try {
+                    const zoneUrl = `/api/graph?zone=${encodeURIComponent(currentViewZone)}&v=${Date.now()}`;
+                    const zoneRes = await fetch(zoneUrl);
+                    if (requestId !== activeGraphRequestId) return;
+
+                    if (zoneRes.ok) {
+                        const zoneText = await zoneRes.text();
+                        const zoneData = zoneText ? JSON.parse(zoneText) : { nodes: [], links: [], stats: { total_entities: 0, total_relations: 0 } };
+
+                        console.log(`[Fetch] Zone data loaded for ${currentViewZone}: ${zoneData.nodes.length} nodes`);
+
+                        const nodeIds = new Set((zoneData.nodes || []).map(n => n.id));
+                        const linkIds = new Set((zoneData.links || []).map(l => l.id));
+
+                        graph.setZoneHighlight(nodeIds, linkIds);
+
+                        // UPDATE COUNTERS (Force update)
+                        const entCount = zoneData.stats ? zoneData.stats.total_entities : nodeIds.size;
+                        const relCount = zoneData.stats ? zoneData.stats.total_relations : linkIds.size;
+
+                        document.getElementById("entity-count").textContent = entCount;
+                        document.getElementById("relation-count").textContent = relCount;
+                        console.log(`[UI] Updated counters to: Entities=${entCount}, Relations=${relCount}`);
+                    }
+                } catch (overlayErr) {
+                    console.warn("Zone overlay failed:", overlayErr);
+                    graph.clearZoneHighlight();
+                }
+            } else {
+                // Return to full view
+                console.log("[Graph] Clearing highlight, restoring all stats.");
+                graph.clearZoneHighlight();
+                document.getElementById("entity-count").textContent = allGraphData.stats.total_entities;
+                document.getElementById("relation-count").textContent = allGraphData.stats.total_relations;
+            }
+
+            setStatus(`Showing ${currentViewZone === "all" ? "full graph" : currentViewZone.replace("_", " ")}`);
         }
     } catch (e) {
-        console.error("Initial fetch failed:", e);
+        console.error("Fetch failed:", e);
+        if (requestId === activeGraphRequestId) {
+            setStatus(`Error loading graph`, true);
+        }
     }
 }
 
@@ -263,7 +304,7 @@ async function handleExtract(customPrompt = null, forcedText = null) {
     const sectionRefEl = document.getElementById("section-ref");
     const docName = docNameEl ? docNameEl.value.trim() : "User Input";
     const sectionRef = sectionRefEl ? sectionRefEl.value.trim() : "chunk";
-    
+
     // Support forced text for custom prompt re-runs
     const text = (forcedText !== null) ? forcedText : textInput.value.trim();
 
