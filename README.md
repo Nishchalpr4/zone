@@ -27,7 +27,7 @@ Current Data Zone contract in this repo includes:
 - Zone-aware evidence storage through `assertions.zone_id`
 - Zone-aware graph filtering using `entity_zone_membership` and `relation_zone_membership`
 
-## Current Implementation Status
+## Current Implementation Status.
 
 What is implemented now:
 
